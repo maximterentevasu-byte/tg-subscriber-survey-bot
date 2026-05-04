@@ -3,7 +3,7 @@ require("dotenv").config();
 const express = require("express");
 const { Bot, webhookCallback } = require("grammy");
 const questions = require("./questions");
-const { ensureSheet, upsertStarted, updateProgress } = require("./sheets");
+const { ensureSheet, appendStarted, updateProgress, checkRepeatAllowed, REPEAT_COOLDOWN_DAYS } = require("./sheets");
 
 const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) throw new Error("TELEGRAM_BOT_TOKEN is missing");
@@ -52,6 +52,7 @@ async function askCurrentQuestion(ctx, session) {
   session.waitingForPhone = true;
   setSession(ctx.from.id, session);
   await updateProgress({
+    rowNumber: session.rowNumber,
     user: ctx.from,
     source: session.source,
     answers: session.answers,
@@ -73,11 +74,29 @@ async function startSurvey(ctx, source) {
     source
   });
 
+  let repeatCheck;
+  try {
+    repeatCheck = await checkRepeatAllowed(user.id);
+  } catch (error) {
+    console.error("Failed to check repeat cooldown:", error);
+    repeatCheck = { allowed: true };
+  }
+
+  if (!repeatCheck.allowed) {
+    const daysWord = repeatCheck.daysLeft === 1 ? "день" : repeatCheck.daysLeft >= 2 && repeatCheck.daysLeft <= 4 ? "дня" : "дней";
+    await ctx.reply(
+      `Ты совсем недавно проходил(а) этот опрос 🙌\n\n` +
+        `Попробуй повторно через ${repeatCheck.daysLeft} ${daysWord}.`
+    );
+    return;
+  }
+
   const session = {
     source,
     step: 0,
     answers: {},
-    waitingForPhone: false
+    waitingForPhone: false,
+    rowNumber: null
   };
 
   setSession(user.id, session);
@@ -90,12 +109,14 @@ async function startSurvey(ctx, source) {
   );
 
   try {
-    await upsertStarted({
+    const rowNumber = await appendStarted({
       user,
       source,
       currentStatus: "Начал опрос"
     });
-    console.log("Started row saved", { user_id: user.id });
+    session.rowNumber = rowNumber;
+    setSession(user.id, session);
+    console.log("Started row saved", { user_id: user.id, rowNumber });
   } catch (error) {
     console.error("Failed to save started row to Google Sheets:", error);
     await ctx.reply(
@@ -134,6 +155,7 @@ bot.on("message:text", async (ctx) => {
     session.phone = text;
 
     await updateProgress({
+      rowNumber: session.rowNumber,
       user,
       source: session.source,
       answers: session.answers,
@@ -158,12 +180,14 @@ bot.on("message:text", async (ctx) => {
     ? `Ответил на ${session.step} из ${questions.length} вопросов`
     : "Ответил на все вопросы, ожидаем номер телефона";
 
-  await updateProgress({
+  const updatedRowNumber = await updateProgress({
+    rowNumber: session.rowNumber,
     user,
     source: session.source,
     answers: session.answers,
     currentStatus: status
   });
+  session.rowNumber = session.rowNumber || updatedRowNumber;
 
   setSession(user.id, session);
   await askCurrentQuestion(ctx, session);

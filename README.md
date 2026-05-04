@@ -1,84 +1,86 @@
-# TG Subscriber Survey Bot для Pick me
+# tg-subscriber-survey-bot
 
-Второй Telegram-бот для публикации в сообществах. Пользователь переходит по ссылке со старт-параметром, проходит опрос, вводит номер телефона бонусной карты Pick me, а ответы записываются в Google Sheets на лист **«Подписчики - ответы»**.
+Второй Telegram-бот для опроса подписчиков Pick me.
 
-## Что умеет
+## Что делает
 
-- Автостарт через deep link: `https://t.me/BOT_USERNAME?start=channel_1`
-- Сохраняет тех, кто только запустил опрос, даже если не дошёл до конца.
-- Сохраняет источник/канал из параметра `start`.
-- Пишет в ту же Google таблицу, но на отдельный лист `Подписчики - ответы`.
-- Все столбцы на русском.
-- Есть столбец **«Пользовательские данные»**.
-- Обязательно спрашивает номер телефона бонусной карты Pick me.
+- Запускает опрос по ссылке вида `https://t.me/BOT_USERNAME?start=channel1`.
+- Сохраняет пользователя в Google Sheets сразу после старта.
+- Обновляет строку по мере ответов, поэтому незавершённые анкеты тоже остаются в таблице.
+- Записывает источник/канал из `start`-параметра.
+- Запрашивает номер телефона, к которому привязана бонусная карта Pick me.
+- Не даёт повторно пройти опрос, если пользователь уже запускал/проходил его менее 21 дня назад.
 
-## Переменные Railway
+## Важное про автостарт
 
-```env
-TELEGRAM_BOT_TOKEN=токен_нового_бота
-BOT_USERNAME=username_бота_без_@
-PUBLIC_URL=https://your-service.up.railway.app
-WEBHOOK_SECRET=длинная_секретная_строка
-GOOGLE_SHEET_ID=id_той_же_google_таблицы
-GOOGLE_SERVICE_ACCOUNT_EMAIL=email_service_account
-GOOGLE_PRIVATE_KEY=-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----\n
-SHEET_NAME=Подписчики - ответы
-BONUS_AMOUNT=20
-```
-
-## Ссылки для 2 каналов
-
-Примеры:
+Telegram deep-link передаёт параметр в команду `/start`, но Telegram-клиент всё равно показывает пользователю кнопку **Start / Запустить**. Бот не может нажать её за пользователя. Правильная ссылка:
 
 ```text
-https://t.me/BOT_USERNAME?start=channel_1
-https://t.me/BOT_USERNAME?start=channel_2
+https://t.me/BOT_USERNAME?start=channel1
 ```
 
-Можно использовать понятные названия:
+Для второго канала:
+
+```text
+https://t.me/BOT_USERNAME?start=channel2
+```
+
+## Railway Variables
+
+```env
+TELEGRAM_BOT_TOKEN=токен_бота
+BOT_USERNAME=юзернейм_бота_без_@
+PUBLIC_URL=https://your-service.up.railway.app
+WEBHOOK_SECRET=любая_длинная_строка
+GOOGLE_SHEET_ID=id_гугл_таблицы
+GOOGLE_SERVICE_ACCOUNT_EMAIL=client_email_из_json
+GOOGLE_PRIVATE_KEY=private_key_из_json_с_\\n
+SHEET_NAME=Подписчики - ответы
+BONUS_AMOUNT=20
+REPEAT_COOLDOWN_DAYS=21
+NODE_ENV=production
+```
+
+## Лист Google Sheets
+
+По умолчанию бот пишет в лист:
+
+```text
+Подписчики - ответы
+```
+
+Если листа нет — бот создаст его. Если шапка отличается — бот обновит первую строку.
+
+## Источники/каналы
+
+Используй разные ссылки для разных каналов:
+
+```text
+https://t.me/BOT_USERNAME?start=channel1
+https://t.me/BOT_USERNAME?start=channel2
+```
+
+Можно использовать читаемые значения:
 
 ```text
 https://t.me/BOT_USERNAME?start=pickme_main
-https://t.me/BOT_USERNAME?start=pickme_second
+https://t.me/BOT_USERNAME?start=pickme_partner
 ```
 
-Значение после `start=` будет записано в столбец **«Источник / канал»**.
+Пробелы в start-параметре не используй. Вместо пробелов — `_`.
 
-Важно: Telegram ограничивает start-параметр. Используйте латиницу, цифры и подчёркивания, до 64 символов.
-
-## Проверка после деплоя
-
-1. Откройте:
+## Команды для проверки
 
 ```text
-https://your-service.up.railway.app/health
+/ping
+/start channel1
 ```
 
-Должно вернуться:
+## Деплой
 
-```json
-{"ok":true}
+```bash
+npm install
+npm start
 ```
 
-2. Откройте ссылку:
-
-```text
-https://t.me/BOT_USERNAME?start=channel_1
-```
-
-3. Пройдите опрос.
-4. Проверьте лист **«Подписчики - ответы»**.
-
-## Текст публикации
-
-```text
-🎁 Получи 20 бонусов на карту Pick me
-
-Мы хотим стать лучше и запустили короткий опрос 🙌
-
-Это займёт всего 1–2 минуты.
-За прохождение начислим тебе 20 бонусов на бонусную карту Pick me 💛
-
-👇 Начать опрос:
-https://t.me/BOT_USERNAME?start=channel_1
-```
+На Railway после добавления переменных сделай Redeploy.
