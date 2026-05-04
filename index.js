@@ -1,5 +1,3 @@
-console.log("ENV PUBLIC_URL =", process.env.PUBLIC_URL);
-
 require("dotenv").config();
 
 const express = require("express");
@@ -11,6 +9,8 @@ const token = process.env.TELEGRAM_BOT_TOKEN;
 if (!token) throw new Error("TELEGRAM_BOT_TOKEN is missing");
 
 const bot = new Bot(token);
+console.log("Bot process started. PUBLIC_URL =", process.env.PUBLIC_URL || "undefined");
+console.log("Bot username env =", process.env.BOT_USERNAME || "undefined");
 const sessions = new Map();
 const bonusAmount = process.env.BONUS_AMOUNT || "20";
 
@@ -67,6 +67,12 @@ async function askCurrentQuestion(ctx, session) {
 
 async function startSurvey(ctx, source) {
   const user = ctx.from;
+  console.log("/start received", {
+    user_id: user.id,
+    username: user.username || null,
+    source
+  });
+
   const session = {
     source,
     step: 0,
@@ -76,17 +82,26 @@ async function startSurvey(ctx, source) {
 
   setSession(user.id, session);
 
-  await upsertStarted({
-    user,
-    source,
-    currentStatus: "Начал опрос"
-  });
-
+  // Сначала отвечаем пользователю, чтобы бот не молчал, даже если Google Sheets временно недоступен.
   await ctx.reply(
     `Спасибо за участие 🙌\n\n` +
       `Я задам тебе несколько коротких вопросов. Это займёт 1–2 минуты.\n` +
       `В конце попросим номер телефона для начисления ${bonusAmount} бонусов на карту Pick me 🎁`
   );
+
+  try {
+    await upsertStarted({
+      user,
+      source,
+      currentStatus: "Начал опрос"
+    });
+    console.log("Started row saved", { user_id: user.id });
+  } catch (error) {
+    console.error("Failed to save started row to Google Sheets:", error);
+    await ctx.reply(
+      "Опрос запущен, но сейчас есть проблема с записью в таблицу. Ответы всё равно можно оставить — мы проверим запись."
+    );
+  }
 
   await askCurrentQuestion(ctx, session);
 }
@@ -97,9 +112,15 @@ bot.command("start", async (ctx) => {
   await startSurvey(ctx, source);
 });
 
+bot.command("ping", async (ctx) => {
+  console.log("/ping received", { user_id: ctx.from?.id });
+  await ctx.reply("pong ✅");
+});
+
 bot.on("message:text", async (ctx) => {
   const user = ctx.from;
   const text = ctx.message.text.trim();
+  console.log("text message received", { user_id: user.id, text: text.slice(0, 80) });
   let session = getSession(user.id);
 
   if (!session) {
@@ -167,6 +188,12 @@ async function main() {
   const telegramWebhook = webhookCallback(bot, "express");
 
   app.post(secretPath, (req, res, next) => {
+    console.log("Webhook POST received", {
+      hasBody: Boolean(req.body),
+      update_id: req.body?.update_id,
+      messageText: req.body?.message?.text || null
+    });
+
     if (!req.body || typeof req.body.update_id === "undefined") {
       console.warn("Ignored invalid webhook request:", req.body);
       return res.sendStatus(200);
@@ -185,7 +212,8 @@ async function main() {
     if (process.env.PUBLIC_URL) {
       const webhookUrl = `${process.env.PUBLIC_URL.replace(/\/$/, "")}${secretPath}`;
       await bot.api.setWebhook(webhookUrl, {
-        allowed_updates: ["message"]
+        allowed_updates: ["message"],
+        drop_pending_updates: true
       });
       console.log(`Webhook set: ${webhookUrl}`);
     } else {
