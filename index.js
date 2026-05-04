@@ -1,3 +1,5 @@
+console.log("ENV PUBLIC_URL =", process.env.PUBLIC_URL);
+
 require("dotenv").config();
 
 const express = require("express");
