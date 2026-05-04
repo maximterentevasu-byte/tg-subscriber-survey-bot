@@ -1,0 +1,18 @@
+{
+  "name": "tg-subscriber-survey-bot",
+  "version": "1.0.0",
+  "description": "Telegram survey bot for Pick me subscribers with Google Sheets storage",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.7",
+    "express": "^4.18.3",
+    "googleapis": "^144.0.0",
+    "grammy": "^1.34.0"
+  }
+}
